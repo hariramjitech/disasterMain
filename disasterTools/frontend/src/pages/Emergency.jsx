@@ -90,7 +90,7 @@ const EmergencyCall = React.memo(() => {
       dispatch({ type: "SET_STATUS", payload: "🚨 Sending alert..." });
       dispatch({ type: "SET_LOADING", payload: true }); // <-- add this
       try {
-        const response = await fetch("http://172.20.50.176:5001/api/emergency-call", {
+        const response = await fetch("http://localhost:5001/api/emergency-call", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

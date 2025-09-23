@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import jsPDF from "jspdf";
 
 const GEMINI_API_KEY = "AIzaSyB6y0VGX3YiIsWYddgdLj4fGQScqiHC7FA"; // Replace with your key
@@ -14,6 +14,29 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+// Helper to fetch nearby places from OpenStreetMap
+const fetchNearbyOSM = async (lat, lng, type) => {
+  const radius = 5000; // meters
+  const overpassUrl = `https://overpass-api.de/api/interpreter`;
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="${type}"](around:${radius},${lat},${lng});
+      way["amenity"="${type}"](around:${radius},${lat},${lng});
+      relation["amenity"="${type}"](around:${radius},${lat},${lng});
+    );
+    out center;
+  `;
+  const res = await fetch(overpassUrl, { method: "POST", body: query });
+  const data = await res.json();
+  return data.elements.map(el => ({
+    id: el.id,
+    name: el.tags?.name || `${type.charAt(0).toUpperCase() + type.slice(1)}`,
+    lat: el.lat || el.center?.lat,
+    lng: el.lon || el.center?.lon,
+  }));
+};
 
 export default function TripHelp() {
   const [tripInput, setTripInput] = useState("");
@@ -106,6 +129,25 @@ export default function TripHelp() {
     setLoading(false);
   };
 
+  // Fetch nearby hospitals & police stations from OSM
+  useEffect(() => {
+    const fetchNearbyLocations = async () => {
+      if (!tripData?.lat || !tripData?.lng) return;
+      try {
+        const [hospitals, police] = await Promise.all([
+          fetchNearbyOSM(tripData.lat, tripData.lng, "hospital"),
+          fetchNearbyOSM(tripData.lat, tripData.lng, "police"),
+        ]);
+        setEmergencyLocations({ hospitals, police });
+        localStorage.setItem("lastEmergencyLocations", JSON.stringify({ hospitals, police }));
+      } catch (err) {
+        console.error("Error fetching nearby emergency locations:", err);
+      }
+    };
+
+    fetchNearbyLocations();
+  }, [tripData?.lat, tripData?.lng]);
+
   const InfoCard = ({ title, items }) => (
     <div className="bg-white shadow rounded p-4 mb-4">
       <h3 className="font-semibold mb-2">{title}</h3>
@@ -183,7 +225,6 @@ export default function TripHelp() {
       y += lineHeight / 2;
     };
 
-    // Title Page
     pdf.setFontSize(20);
     pdf.setFont("helvetica", "bold");
     pdf.text(`${safeData.place} - Travel Safety Guide`, pageWidth / 2, y, { align: "center" });
@@ -195,7 +236,6 @@ export default function TripHelp() {
     pdf.text(`Risk Level: ${safeData.risk_level}`, 10, y); y += lineHeight;
     pdf.text(`Safety Score: ${safeData.safety_score}`, 10, y); y += lineHeight + 5;
 
-    // Sections
     addSection("Travel Tips", safeData.travel_tips);
     addSection("Cultural Notes", safeData.cultural_notes);
     addSection("Best Time to Visit", [safeData.best_time_to_visit]);
@@ -203,19 +243,16 @@ export default function TripHelp() {
     addSection("Potential Disasters", safeData.disasters);
     addSection("Prevention Measures", safeData.preventions);
     addSection("Survival Tips", safeData.survival);
-
     addSection("Things to Carry", safeData.things_to_carry);
 
-    const formatContacts = (contacts) => 
-      Object.entries(contacts || {}).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
+    const formatContacts = (contacts) => Object.entries(contacts || {}).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
     addSection("General Contacts", formatContacts(safeData.emergency_contacts.general));
     addSection("Local Contacts", formatContacts(safeData.emergency_contacts.local));
     addSection("Emergency Meeting Points", safeData.emergency_meeting_points);
     addSection("Evacuation Routes", safeData.evacuation_routes);
 
-    addSection("Nearby Hospitals", emergencyLocations?.hospitals?.map(h => h.tags?.name || "Unnamed"));
-    addSection("Nearby Police Stations", emergencyLocations?.police?.map(p => p.tags?.name || "Unnamed"));
-
+    addSection("Nearby Hospitals", emergencyLocations?.hospitals?.map(h => h.name || "Unnamed"));
+    addSection("Nearby Police Stations", emergencyLocations?.police?.map(p => p.name || "Unnamed"));
     addSection("Weather Alerts", safeData.weather_alerts);
 
     pdf.save(`${safeData.place}-trip-guide.pdf`);
@@ -309,8 +346,8 @@ export default function TripHelp() {
             )}
             {activeTab==="locations" && (
               <>
-                <InfoCard title="Nearby Hospitals" items={emergencyLocations?.hospitals?.map(h => h.tags?.name || "Unnamed") || []} />
-                <InfoCard title="Nearby Police Stations" items={emergencyLocations?.police?.map(p => p.tags?.name || "Unnamed") || []} />
+                <InfoCard title="Nearby Hospitals" items={emergencyLocations?.hospitals?.map(h => h.name || "Unnamed") || []} />
+                <InfoCard title="Nearby Police Stations" items={emergencyLocations?.police?.map(p => p.name || "Unnamed") || []} />
               </>
             )}
             {activeTab==="weather" && (

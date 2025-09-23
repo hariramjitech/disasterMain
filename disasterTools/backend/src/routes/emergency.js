@@ -3,21 +3,22 @@ const router = express.Router();
 const Twilio = require("twilio");
 const sanitizeForXml = require("../utils/sanitizeForXml");
 
+// Initialize Twilio client once
 const client = Twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH);
 
 router.post("/emergency-call", async (req, res) => {
   const { to, disasterType, location, address, additionalInfo, mode } = req.body;
 
-  // Validate required fields
+  // Basic validation
   if (!to || !disasterType || !location?.lat || !location?.lng) {
-    return res.status(400).json({ success: false, error: "Missing fields" });
+    return res.status(400).json({ success: false, error: "Missing required fields" });
   }
 
   const locationUrl = `https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`;
 
   try {
     if (mode === "call") {
-      // Make Twilio call and say the address + info
+      // Prepare safe message for TTS
       const safeMessage = sanitizeForXml(
         `🚨 Emergency Alert 🚨. Disaster: ${disasterType}. Location: ${address || "Address not available"}. Additional Info: ${additionalInfo || "None"}.`
       );
@@ -32,8 +33,10 @@ router.post("/emergency-call", async (req, res) => {
     }
 
     if (mode === "sms") {
-      // Send SMS with a Google Maps link instead of address
+      // Prepare SMS body with Google Maps link
       const smsBody = `🚨 Emergency Alert 🚨\nDisaster: ${disasterType}\nLocation: ${locationUrl}\nAdditional Info: ${additionalInfo || "None"}`;
+
+      console.log(`Sending SMS to ${to} from ${process.env.TWILIO_FROM} with body:\n${smsBody}`);
 
       const sms = await client.messages.create({
         to,
@@ -44,10 +47,10 @@ router.post("/emergency-call", async (req, res) => {
       return res.json({ success: true, sid: sms.sid });
     }
 
-    res.status(400).json({ success: false, error: "Invalid mode" });
+    return res.status(400).json({ success: false, error: "Invalid mode, must be 'call' or 'sms'" });
   } catch (err) {
     console.error("Twilio error:", err);
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

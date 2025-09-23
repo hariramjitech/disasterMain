@@ -9,6 +9,8 @@ import OfflineMap from './pages/OfflineMap.jsx'
 import CapAlertsMap from './pages/CapAlertsMap.jsx'
 import TripHelp from './pages/TripHelp.jsx'
 
+
+
 export default function App() {
   return (
     <Router>
@@ -23,6 +25,7 @@ export default function App() {
             <Route path="/map" element={<OfflineMap />} />
             <Route path='/capalerts' element={<CapAlertsMap />} />
             <Route path='/triphelp' element={<TripHelp />} />
+           
           </Routes>
         </main>
       </div>
